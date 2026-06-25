@@ -1,18 +1,16 @@
 import { useState, useMemo } from 'react';
 
 /**
- * Distributes `totalPercent` equally across an array of users,
- * assigning any rounding remainder to the first user.
+ * Builds the default splits map: equal share across all users.
+ * Assigns rounding remainder to the first user.
  *
- * @param {Array<string>} usersToShare
- * @param {number} totalPercent
+ * @param {Array<string>} users
  * @returns {Object} e.g. { Amit: 34, Rahul: 33, Sneha: 33 }
  */
-function distributeEqually(usersToShare, totalPercent) {
-  if (usersToShare.length === 0) return {};
-  const base      = Math.floor(totalPercent / usersToShare.length);
-  const remainder = totalPercent - base * usersToShare.length;
-  return usersToShare.reduce((acc, user, idx) => {
+function buildDefaultSplits(users) {
+  const base      = Math.floor(100 / users.length);
+  const remainder = 100 - base * users.length;
+  return users.reduce((acc, user, idx) => {
     acc[user] = base + (idx === 0 ? remainder : 0);
     return acc;
   }, {});
@@ -22,12 +20,11 @@ function distributeEqually(usersToShare, totalPercent) {
  * Form component to add a new expense.
  *
  * Each user has:
- *  - A checkbox to include/exclude them from the split.
- *  - A percentage slider to set their share.
+ *  - A checkbox to include / exclude them from the split.
+ *  - A percentage slider to manually set their share.
  *
- * Moving a slider automatically redistributes the remaining percentage
- * proportionally among all other checked users, so the total is ALWAYS 100%.
- * Unchecking a user zeroes their share and redistributes it equally to the rest.
+ * The submit button is enabled only when the sum of all checked
+ * users' sliders equals exactly 100%.
  *
  * @param {Array<string>} users        - List of available users.
  * @param {Function}      onAddExpense - Callback with the validated expense object.
@@ -38,75 +35,35 @@ export default function AddExpenseForm({ users, onAddExpense }) {
   const [payer, setPayer]             = useState(users[0]);
   const [error, setError]             = useState('');
 
-  // Track which users are participating
+  // Which users are participating
   const [checked, setChecked] = useState(() =>
     users.reduce((acc, u) => { acc[u] = true; return acc; }, {})
   );
 
-  // Track each user's percentage share (always sums to 100 among checked users)
-  const [splits, setSplits] = useState(() => distributeEqually(users, 100));
+  // Each user's manual slider value (0-100)
+  const [splits, setSplits] = useState(() => buildDefaultSplits(users));
 
-  const checkedUsers  = users.filter(u => checked[u]);
-  const totalPercent  = useMemo(
-    () => users.reduce((sum, u) => sum + (splits[u] || 0), 0),
-    [splits, users]
+  // Sum of slider values for checked users only
+  const totalPercent = useMemo(
+    () => users.reduce((sum, u) => sum + (checked[u] ? (splits[u] || 0) : 0), 0),
+    [splits, checked, users]
   );
-  const canSubmit = checkedUsers.length > 0; // total is always 100 when at least one is checked
 
-  /** Toggle a user's participation; redistribute their freed percentage equally. */
+  const isBalanced = totalPercent === 100;
+
+  /** Toggle a user's checkbox. Resets their slider to 0 when excluded. */
   const handleCheckboxToggle = (user) => {
-    const willBeChecked   = !checked[user];
-    const newChecked      = { ...checked, [user]: willBeChecked };
-    const newCheckedUsers = users.filter(u => newChecked[u]);
-
-    // Redistribute 100% equally among all newly-checked users
-    const newSplits = users.reduce((acc, u) => { acc[u] = 0; return acc; }, {});
-    Object.assign(newSplits, distributeEqually(newCheckedUsers, 100));
-
-    setChecked(newChecked);
-    setSplits(newSplits);
+    const willBeChecked = !checked[user];
+    setChecked(prev => ({ ...prev, [user]: willBeChecked }));
+    // Clear slider value when a user is excluded
+    if (!willBeChecked) {
+      setSplits(prev => ({ ...prev, [user]: 0 }));
+    }
   };
 
-  /**
-   * When user X's slider moves to `newValue`:
-   *  1. Clamp newValue so it doesn't exceed the total available (100 − everyone else's fixed share).
-   *  2. Distribute the remainder (100 − newValue) proportionally among other checked users.
-   *  3. Fix any rounding drift so the grand total stays exactly 100.
-   */
-  const handleSliderChange = (changedUser, rawValue) => {
-    const others = checkedUsers.filter(u => u !== changedUser);
-
-    // Maximum this user can claim is 100 minus 1% for each other checked user
-    const maxValue = 100 - others.length;
-    const newValue = Math.min(Number(rawValue), maxValue);
-
-    const remaining     = 100 - newValue;          // what's left for others
-    const othersCurrentTotal = others.reduce((s, u) => s + (splits[u] || 0), 0);
-
-    const newSplits = { ...splits, [changedUser]: newValue };
-
-    if (others.length === 0) {
-      // Only one person checked — they get 100%
-      setSplits(newSplits);
-      return;
-    }
-
-    if (othersCurrentTotal > 0) {
-      // Proportional redistribution: each other user keeps their relative share
-      others.forEach(u => {
-        newSplits[u] = Math.round((splits[u] / othersCurrentTotal) * remaining);
-      });
-    } else {
-      // Edge case: everyone else was at 0 — distribute equally
-      Object.assign(newSplits, distributeEqually(others, remaining));
-    }
-
-    // Fix rounding drift — assign any leftover/deficit to the first other user
-    const grandTotal = users.reduce((s, u) => s + (newSplits[u] || 0), 0);
-    const drift = 100 - grandTotal;
-    if (drift !== 0 && others.length > 0) newSplits[others[0]] += drift;
-
-    setSplits(newSplits);
+  /** Update a single user's slider value directly — no auto-redistribution. */
+  const handleSliderChange = (user, newValue) => {
+    setSplits(prev => ({ ...prev, [user]: Number(newValue) }));
   };
 
   const handleSubmit = (e) => {
@@ -121,14 +78,16 @@ export default function AddExpenseForm({ users, onAddExpense }) {
       return;
     }
 
-    if (checkedUsers.length === 0) {
-      setError('At least one participant must be selected');
+    if (!isBalanced) {
+      setError('Percentages must total exactly 100%');
       return;
     }
 
-    // Only include users with a non-zero split percentage
+    // Only include checked users with a non-zero split
     const activeSplits = Object.fromEntries(
-      Object.entries(splits).filter(([, pct]) => pct > 0)
+      users
+        .filter(u => checked[u] && splits[u] > 0)
+        .map(u => [u, splits[u]])
     );
 
     onAddExpense({
@@ -140,13 +99,12 @@ export default function AddExpenseForm({ users, onAddExpense }) {
       date: new Date().toISOString()
     });
 
-    // Reset form
+    // Reset form to defaults
     setDescription('');
     setAmount('');
     setPayer(users[0]);
-    const resetChecked = users.reduce((acc, u) => { acc[u] = true; return acc; }, {});
-    setChecked(resetChecked);
-    setSplits(distributeEqually(users, 100));
+    setChecked(users.reduce((acc, u) => { acc[u] = true; return acc; }, {}));
+    setSplits(buildDefaultSplits(users));
   };
 
   return (
@@ -196,10 +154,9 @@ export default function AddExpenseForm({ users, onAddExpense }) {
         {/* Participant checkboxes + percentage sliders */}
         <div className="form-group">
           <label className="form-label">
-            Split Percentages
-            {/* Show live total — always 100% when anyone is checked */}
-            <span className={`split-total ${totalPercent === 100 ? 'split-ok' : 'split-error'}`}>
-              &nbsp;({totalPercent}% / 100%)
+            Split Percentages&nbsp;
+            <span className={`split-total ${isBalanced ? 'split-ok' : 'split-error'}`}>
+              ({totalPercent}% / 100%)
             </span>
           </label>
 
@@ -207,7 +164,7 @@ export default function AddExpenseForm({ users, onAddExpense }) {
             {users.map(user => (
               <div key={user} className={`slider-row ${!checked[user] ? 'slider-row-disabled' : ''}`}>
 
-                {/* Checkbox to include/exclude this user */}
+                {/* Checkbox to include / exclude this user */}
                 <label className="slider-checkbox-label">
                   <input
                     type="checkbox"
@@ -217,7 +174,7 @@ export default function AddExpenseForm({ users, onAddExpense }) {
                   <span className="slider-name">{user}</span>
                 </label>
 
-                {/* Slider — disabled when user is unchecked */}
+                {/* Slider is disabled when user is unchecked */}
                 <input
                   type="range"
                   className="slider"
@@ -235,17 +192,20 @@ export default function AddExpenseForm({ users, onAddExpense }) {
             ))}
           </div>
 
-          <p className="split-hint" style={{ color: 'var(--text-secondary)', marginTop: '0.5rem' }}>
-            Moving a slider automatically adjusts others to keep the total at 100%.
-          </p>
+          {!isBalanced && (
+            <p className="split-hint">
+              Adjust sliders so the total is exactly 100% to enable submission.
+            </p>
+          )}
         </div>
 
+        {/* Disabled until sliders of checked users total exactly 100% */}
         <button
           type="submit"
-          className={`btn btn-primary ${!canSubmit ? 'btn-disabled' : ''}`}
-          disabled={!canSubmit}
+          className={`btn btn-primary ${!isBalanced ? 'btn-disabled' : ''}`}
+          disabled={!isBalanced}
         >
-          Add Expense
+          {isBalanced ? 'Add Expense' : `Total must be 100% (currently ${totalPercent}%)`}
         </button>
       </form>
     </div>
