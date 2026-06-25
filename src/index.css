@@ -146,32 +146,85 @@ p {
   gap: 0.75rem;
 }
 
-.participant-label {
+/* Percentage Sliders */
+.slider-group {
   display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  background-color: var(--bg-color);
-  border: 1px solid var(--border-color);
-  padding: 0.75rem;
-  border-radius: var(--radius-md);
-  cursor: pointer;
-  transition: all 0.2s;
-  user-select: none;
+  flex-direction: column;
+  gap: 0.75rem;
 }
 
-.participant-label:hover {
+.slider-row {
+  display: grid;
+  grid-template-columns: 80px 1fr 48px;
+  align-items: center;
+  gap: 0.75rem;
+  background-color: var(--bg-color);
+  border: 1px solid var(--border-color);
+  padding: 0.75rem 1rem;
+  border-radius: var(--radius-md);
+  transition: border-color 0.2s;
+}
+
+.slider-row:hover {
   border-color: var(--surface-highlight);
 }
 
-.participant-label input {
-  accent-color: var(--primary-color);
-  width: 1.25rem;
-  height: 1.25rem;
+.slider-name {
+  font-weight: 500;
+  color: var(--text-primary);
+  font-size: 0.9rem;
 }
 
-.participant-label:has(input:checked) {
-  border-color: var(--primary-color);
-  background-color: rgba(59, 130, 246, 0.1);
+.slider {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--border-color);
+  outline: none;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--primary-color);
+  cursor: pointer;
+  transition: transform 0.15s, box-shadow 0.15s;
+  box-shadow: 0 0 0 3px rgba(59,130,246,0.2);
+}
+
+.slider::-webkit-slider-thumb:hover {
+  transform: scale(1.15);
+  box-shadow: 0 0 0 5px rgba(59,130,246,0.3);
+}
+
+.slider-value {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--primary-color);
+  text-align: right;
+  min-width: 40px;
+}
+
+/* Percentage total indicator */
+.split-total {
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.split-ok    { color: var(--accent-color); }
+.split-error { color: var(--danger-color); }
+
+.split-hint {
+  font-size: 0.8rem;
+  color: var(--danger-color);
+  margin-top: 0.5rem;
 }
 
 /* Buttons */
@@ -201,8 +254,10 @@ p {
   transform: translateY(-1px);
 }
 
-.btn-primary:active {
-  transform: translateY(0);
+.btn-disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  transform: none !important;
 }
 
 .btn-danger {

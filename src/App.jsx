@@ -17,21 +17,17 @@ function App() {
   };
 
   const handleSettleUp = (debtor, creditor, amount) => {
-    // Add a settlement expense
+    // A settlement is modelled as the debtor paying 100% of the amount,
+    // with the creditor absorbing 100% of the cost — perfectly cancelling the debt.
     const settlementExpense = {
       id: Date.now().toString(),
-      description: `Settlement: ${debtor} paid ${creditor}`,
+      description: `Settlement: ${debtor} → ${creditor}`,
       amount: amount,
       payer: debtor,
-      participants: [creditor], // The creditor receives the benefit of the payment
+      splits: { [creditor]: 100 }, // Creditor absorbs 100% of this settlement
       date: new Date().toISOString()
     };
-    
-    // Note: If debtor pays creditor $50:
-    // Payer = Debtor (+50 balance increase for paying out)
-    // Participant = Creditor (-50 balance decrease for receiving the benefit)
-    // This perfectly cancels out the debt!
-    
+
     setExpenses(prev => [...prev, settlementExpense]);
   };
 
